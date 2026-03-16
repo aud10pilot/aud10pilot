@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iPhone Savings Tracker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: linear-gradient(160deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            padding: 20px 16px 40px;
+        }
+
+        .container { max-width: 480px; margin: 0 auto; }
+
+        /* ─── Header ─── */
+        .header { text-align: center; color: white; margin-bottom: 24px; padding-top: 12px; }
+        .header h1 { font-size: 1.8rem; font-weight: 900; letter-spacing: -0.5px; }
+        .header h1 span { color: #a78bfa; }
+        .header p { font-size: 0.95rem; opacity: 0.6; margin-top: 4px; }
+
+        /* ─── Card ─── */
+        .card {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 28px;
+            padding: 28px 24px;
+            margin-bottom: 16px;
+        }
+
+        /* ─── iPhone SVG ─── */
+        .iphone-wrapper {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 24px;
+            filter: drop-shadow(0 24px 40px rgba(0,0,0,0.5));
+        }
+
+        #svg-fill {
+            transition: y 1.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        height 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* ─── Amount display ─── */
+        .amount-row {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .amount-big {
+            font-size: 2.8rem;
+            font-weight: 900;
+            color: white;
+            line-height: 1;
+        }
+        .amount-big .saved { color: #a78bfa; }
+        .goal-sub {
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.45);
+            margin-top: 4px;
+        }
+        .goal-sub strong { color: #a78bfa; }
+
+        /* ─── Progress bar ─── */
+        .bar-track {
+            width: 100%;
+            height: 18px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 9px;
+            overflow: hidden;
+            margin-bottom: 6px;
+            position: relative;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 9px;
+            background: linear-gradient(90deg, #7c3aed, #a78bfa, #c084fc, #e879f9);
+            background-size: 300% 100%;
+            animation: barShimmer 3s linear infinite;
+            transition: width 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            width: 0%;
+        }
+        @keyframes barShimmer {
+            0%   { background-position: 0% 0; }
+            100% { background-position: 300% 0; }
+        }
+
+        /* tick marks */
+        .bar-ticks { position: relative; height: 6px; margin-bottom: 16px; }
+        .tick {
+            position: absolute;
+            width: 2px; height: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 1px;
+            transform: translateX(-50%);
+        }
+
+        /* ─── Milestones ─── */
+        .milestones {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .milestone {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .ms-circle {
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.07);
+            border: 2px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .ms-circle.reached {
+            background: linear-gradient(135deg, #7c3aed, #a78bfa);
+            border-color: #a78bfa;
+            box-shadow: 0 0 18px rgba(167,139,250,0.6);
+            transform: scale(1.1);
+        }
+        .ms-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: rgba(255,255,255,0.35);
+            transition: color 0.4s;
+        }
+        .ms-label.reached { color: #a78bfa; }
+
+        /* ─── Add Money button ─── */
+        .add-btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+            color: white;
+            border: none;
+            border-radius: 18px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 8px 30px rgba(124, 58, 237, 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            letter-spacing: 0.3px;
+        }
+        .add-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 35px rgba(124,58,237,0.55); }
+        .add-btn:active { transform: translateY(0); }
+        .add-btn .plus-icon {
+            width: 28px; height: 28px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem; line-height: 1;
+        }
+
+        /* ─── History ─── */
+        .history-card {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 28px;
+            padding: 24px;
+            margin-top: 16px;
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .history-title { font-size: 1.05rem; font-weight: 800; color: white; }
+        .history-badge {
+            background: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.5);
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+        .tx-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 320px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+        .tx-list::-webkit-scrollbar { width: 4px; }
+        .tx-list::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); border-radius: 2px; }
+        .tx-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+        .tx-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 14px;
+            animation: slideIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-12px) scale(0.95); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .tx-icon {
+            width: 42px; height: 42px;
+            background: rgba(167,139,250,0.12);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+        .tx-details { flex: 1; min-width: 0; }
+        .tx-note { font-size: 0.9rem; font-weight: 700; color: rgba(255,255,255,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tx-date { font-size: 0.73rem; color: rgba(255,255,255,0.35); margin-top: 2px; }
+        .tx-amount { font-size: 1rem; font-weight: 800; color: #86efac; flex-shrink: 0; }
+
+        .empty-state {
+            text-align: center;
+            padding: 28px 0;
+            color: rgba(255,255,255,0.3);
+        }
+        .empty-state .empty-icon { font-size: 2.8rem; margin-bottom: 8px; }
+        .empty-state p { font-size: 0.85rem; }
+
+        /* ─── Modals ─── */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(6px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+            opacity: 0; visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+
+        .modal {
+            background: #1e1b4b;
+            border: 1px solid rgba(167,139,250,0.2);
+            border-radius: 28px;
+            padding: 36px 28px;
+            text-align: center;
+            width: calc(100% - 48px);
+            max-width: 360px;
+            transform: scale(0.75);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .modal-overlay.active .modal { transform: scale(1); }
+
+        .cel-emoji { font-size: 5rem; display: block; margin-bottom: 12px; line-height: 1; }
+        .cel-title { font-size: 1.7rem; font-weight: 900; color: white; margin-bottom: 6px; }
+        .cel-amount { font-size: 2.2rem; font-weight: 900; color: #a78bfa; margin-bottom: 10px; }
+        .cel-msg { font-size: 0.95rem; color: rgba(255,255,255,0.6); line-height: 1.5; margin-bottom: 28px; }
+
+        .cel-btn {
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            padding: 15px 44px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 6px 20px rgba(124,58,237,0.4);
+        }
+        .cel-btn:hover { transform: scale(1.05); }
+
+        /* Add modal form */
+        .add-modal-title { font-size: 1.5rem; font-weight: 900; color: white; margin-bottom: 6px; }
+        .add-modal-sub { font-size: 0.9rem; color: rgba(255,255,255,0.45); margin-bottom: 24px; }
+
+        .form-group { text-align: left; margin-bottom: 16px; }
+        .form-label { display: block; font-size: 0.82rem; font-weight: 700; color: rgba(255,255,255,0.6); margin-bottom: 8px; letter-spacing: 0.4px; text-transform: uppercase; }
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(255,255,255,0.06);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            color: white;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-input::placeholder { color: rgba(255,255,255,0.25); font-weight: 400; }
+        .form-input:focus { border-color: #a78bfa; }
+        .form-input.error { border-color: #f87171; }
+
+        .amount-input-wrap { position: relative; }
+        .amount-prefix {
+            position: absolute; left: 14px; top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.1rem; font-weight: 700; color: rgba(255,255,255,0.4);
+        }
+        .amount-input-wrap .form-input { padding-left: 28px; font-size: 1.15rem; }
+
+        .form-btns { display: flex; gap: 10px; margin-top: 8px; }
+        .btn-cancel {
+            flex: 1; padding: 14px;
+            background: rgba(255,255,255,0.07);
+            color: rgba(255,255,255,0.5);
+            border: none; border-radius: 12px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.95rem; font-weight: 700;
+            cursor: pointer;
+        }
+        .btn-save {
+            flex: 2; padding: 14px;
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+            color: white; border: none; border-radius: 12px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 1rem; font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        .btn-save:hover { transform: scale(1.02); }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <h1>iPhone <span>Savings</span> Tracker</h1>
+        <p>Every dollar counts — keep it up!</p>
+    </div>
+
+    <!-- Main card -->
+    <div class="card">
+
+        <!-- iPhone SVG -->
+        <div class="iphone-wrapper">
+            <svg id="iphone-svg" viewBox="0 0 200 430" width="155" height="334" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="fillGrad" x1="0" y1="1" x2="0" y2="0">
+                        <stop offset="0%"   stop-color="#4f46e5"/>
+                        <stop offset="40%"  stop-color="#7c3aed"/>
+                        <stop offset="80%"  stop-color="#a855f7"/>
+                        <stop offset="100%" stop-color="#e879f9"/>
+                    </linearGradient>
+                    <clipPath id="phoneClip">
+                        <rect x="6" y="6" width="188" height="418" rx="38" ry="38"/>
+                    </clipPath>
+                    <!-- screen clip (inner) -->
+                    <clipPath id="screenClip">
+                        <rect x="16" y="56" width="168" height="320" rx="4" ry="4"/>
+                    </clipPath>
+                </defs>
+
+                <!-- Phone body -->
+                <rect x="6" y="6" width="188" height="418" rx="38" ry="38" fill="#0d0d1a"/>
+
+                <!-- Liquid fill (grows from bottom) -->
+                <rect id="svg-fill" x="6" y="424" width="188" height="0"
+                      clip-path="url(#phoneClip)" fill="url(#fillGrad)" opacity="0.9"/>
+
+                <!-- Glass shimmer on fill top -->
+                <rect x="6" y="6" width="94" height="418" rx="38" ry="0"
+                      clip-path="url(#phoneClip)" fill="white" opacity="0.03"/>
+
+                <!-- Phone bezel outer -->
+                <rect x="6" y="6" width="188" height="418" rx="38" ry="38"
+                      fill="none" stroke="#2a2a4a" stroke-width="10"/>
+                <!-- Phone bezel inner highlight -->
+                <rect x="6" y="6" width="188" height="418" rx="38" ry="38"
+                      fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="2"/>
+
+                <!-- Side power button -->
+                <rect x="194" y="108" width="10" height="68" rx="5" fill="#1e1e3a"/>
+                <!-- Volume up -->
+                <rect x="-4" y="88" width="10" height="44" rx="5" fill="#1e1e3a"/>
+                <!-- Volume down -->
+                <rect x="-4" y="142" width="10" height="44" rx="5" fill="#1e1e3a"/>
+                <!-- Mute switch -->
+                <rect x="-4" y="56" width="10" height="24" rx="5" fill="#1e1e3a"/>
+
+                <!-- Dynamic island -->
+                <rect x="68" y="18" width="64" height="22" rx="11" fill="#000"/>
+                <!-- Camera dot inside island -->
+                <circle cx="120" cy="29" r="5" fill="#0d0d1a"/>
+                <circle cx="120" cy="29" r="3" fill="#111"/>
+
+                <!-- Screen area -->
+                <rect x="16" y="52" width="168" height="326" rx="6" ry="6" fill="rgba(0,0,0,0.2)"/>
+
+                <!-- Screen content (always on top of fill) -->
+                <!-- Apple  icon -->
+                <text x="100" y="140" text-anchor="middle" font-size="40" fill="rgba(255,255,255,0.9)"></text>
+
+                <!-- Dollar amount -->
+                <text id="svg-amount" x="100" y="215" text-anchor="middle"
+                      font-family="Nunito, sans-serif" font-size="32" font-weight="900"
+                      fill="white" style="text-shadow: 0 2px 8px rgba(0,0,0,0.5)">$0</text>
+
+                <!-- Subtitle -->
+                <text x="100" y="240" text-anchor="middle"
+                      font-family="Nunito, sans-serif" font-size="13"
+                      fill="rgba(255,255,255,0.5)">saved of $600</text>
+
+                <!-- Percent badge -->
+                <rect x="70" y="256" width="60" height="26" rx="13" fill="rgba(255,255,255,0.1)"/>
+                <text id="svg-percent" x="100" y="274" text-anchor="middle"
+                      font-family="Nunito, sans-serif" font-size="15" font-weight="800"
+                      fill="rgba(255,255,255,0.9)">0%</text>
+
+                <!-- Home bar -->
+                <rect x="72" y="406" width="56" height="5" rx="2.5" fill="rgba(255,255,255,0.22)"/>
+            </svg>
+        </div>
+
+        <!-- Amount text -->
+        <div class="amount-row">
+            <div class="amount-big">
+                <span class="saved" id="current-amount">$0</span>
+                <span style="color:rgba(255,255,255,0.25); font-size:1.6rem"> / $600</span>
+            </div>
+            <div class="goal-sub" id="remaining-text">
+                <strong>$600 to go!</strong>
+            </div>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="bar-track">
+            <div class="bar-fill" id="progress-bar"></div>
+        </div>
+        <div class="bar-ticks">
+            <div class="tick" style="left:25%"></div>
+            <div class="tick" style="left:50%"></div>
+            <div class="tick" style="left:75%"></div>
+        </div>
+
+        <!-- Milestone badges -->
+        <div class="milestones">
+            <div class="milestone">
+                <div class="ms-circle" id="m1">🌱</div>
+                <div class="ms-label" id="m1-lbl">$150</div>
+            </div>
+            <div class="milestone">
+                <div class="ms-circle" id="m2">⭐</div>
+                <div class="ms-label" id="m2-lbl">$300</div>
+            </div>
+            <div class="milestone">
+                <div class="ms-circle" id="m3">🔥</div>
+                <div class="ms-label" id="m3-lbl">$450</div>
+            </div>
+            <div class="milestone">
+                <div class="ms-circle" id="m4">📱</div>
+                <div class="ms-label" id="m4-lbl">$600!</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Money button -->
+    <button class="add-btn" id="add-btn" onclick="openAddModal()">
+        <span class="plus-icon">+</span>
+        Add Money
+    </button>
+
+    <!-- Transaction history -->
+    <div class="history-card">
+        <div class="history-header">
+            <div class="history-title">Transaction History</div>
+            <div class="history-badge" id="tx-count">0 deposits</div>
+        </div>
+        <div class="tx-list" id="tx-list">
+            <div class="empty-state">
+                <div class="empty-icon">🏦</div>
+                <p>No deposits yet!</p>
+                <p style="margin-top:4px; opacity:0.6">Tap "Add Money" to get started</p>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /container -->
+
+<!-- ── Add Money Modal ── -->
+<div class="modal-overlay" id="add-modal" onclick="overlayClick(event,'add-modal')">
+    <div class="modal">
+        <span style="font-size:3rem; display:block; margin-bottom:12px;">💰</span>
+        <div class="add-modal-title">Add Money</div>
+        <div class="add-modal-sub">How much are you saving today?</div>
+
+        <div class="form-group">
+            <label class="form-label">Amount</label>
+            <div class="amount-input-wrap">
+                <span class="amount-prefix">$</span>
+                <input id="deposit-amount" class="form-input" type="number"
+                       placeholder="0.00" min="0.01" step="0.01" inputmode="decimal">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Note (optional)</label>
+            <input id="deposit-note" class="form-input" type="text"
+                   placeholder="Birthday money, Chores, etc.">
+        </div>
+        <div class="form-btns">
+            <button class="btn-cancel" onclick="closeModal('add-modal')">Cancel</button>
+            <button class="btn-save" onclick="saveDeposit()">Save it!</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Celebration Modal ── -->
+<div class="modal-overlay" id="cel-modal" onclick="overlayClick(event,'cel-modal')">
+    <div class="modal">
+        <span class="cel-emoji" id="cel-emoji">🎉</span>
+        <div class="cel-title"  id="cel-title">Amazing!</div>
+        <div class="cel-amount" id="cel-amount">$150</div>
+        <div class="cel-msg"    id="cel-msg">You're 25% of the way there!</div>
+        <button class="cel-btn" onclick="closeModal('cel-modal')">Keep Going! 💪</button>
+    </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   State & constants
+═══════════════════════════════════════════════ */
+const GOAL = 600;
+const MILESTONES = [
+    { amount: 150, pct: 25,  emoji: '🌱', title: 'Off to a Great Start!',   msg: "25% down — you're building awesome habits! Keep it going!" },
+    { amount: 300, pct: 50,  emoji: '⭐', title: 'Halfway There!',           msg: "You've saved $300! You're exactly halfway to your iPhone!" },
+    { amount: 450, pct: 75,  emoji: '🔥', title: 'So Close!!',               msg: "Only $150 left! That iPhone is practically in your hands!" },
+    { amount: 600, pct: 100, emoji: '📱', title: 'YOU DID IT!!!',            msg: "You saved the full $600! Time to get that iPhone — we are SO proud of you! 🎊" },
+];
+
+let transactions     = JSON.parse(localStorage.getItem('iphone-tx')  || '[]');
+let hitMilestones    = JSON.parse(localStorage.getItem('iphone-ms')  || '[]');
+
+/* ═══════════════════════════════════════════════
+   Core helpers
+═══════════════════════════════════════════════ */
+function total() {
+    return transactions.reduce((s, t) => s + t.amount, 0);
+}
+
+function fmt(n) {
+    return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function fmtDate(iso) {
+    return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+}
+
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+/* ═══════════════════════════════════════════════
+   UI update
+═══════════════════════════════════════════════ */
+function updateUI() {
+    const saved = total();
+    const pct   = Math.min((saved / GOAL) * 100, 100);
+    const rem   = Math.max(GOAL - saved, 0);
+
+    // Top amount
+    document.getElementById('current-amount').textContent = fmt(saved);
+    document.getElementById('remaining-text').innerHTML   =
+        rem > 0 ? `<strong>${fmt(rem)}</strong> to go!` : '<strong style="color:#86efac">Goal reached! 🎉</strong>';
+
+    // Progress bar
+    document.getElementById('progress-bar').style.width = pct + '%';
+
+    // SVG iPhone fill
+    // clipPath rect: y=6, height=418 → bottom edge y=424
+    const fillH = (418 * pct) / 100;
+    const fillY = 424 - fillH;
+    const fillEl = document.getElementById('svg-fill');
+    fillEl.setAttribute('y', fillY);
+    fillEl.setAttribute('height', fillH);
+
+    // SVG text
+    document.getElementById('svg-amount').textContent  = fmt(saved);
+    document.getElementById('svg-percent').textContent = Math.round(pct) + '%';
+
+    // Milestone badges
+    MILESTONES.forEach((m, i) => {
+        const n = i + 1;
+        const circle = document.getElementById(`m${n}`);
+        const label  = document.getElementById(`m${n}-lbl`);
+        if (saved >= m.amount) {
+            circle.classList.add('reached');
+            label.classList.add('reached');
+        } else {
+            circle.classList.remove('reached');
+            label.classList.remove('reached');
+        }
+    });
+
+    // Transaction list
+    renderTxList();
+}
+
+const TX_ICONS = ['💵','💴','💶','💰','🤑','💸','🪙','💎'];
+
+function renderTxList() {
+    const listEl  = document.getElementById('tx-list');
+    const countEl = document.getElementById('tx-count');
+    const n       = transactions.length;
+
+    countEl.textContent = `${n} deposit${n !== 1 ? 's' : ''}`;
+
+    if (n === 0) {
+        listEl.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">🏦</div>
+                <p>No deposits yet!</p>
+                <p style="margin-top:4px; opacity:0.6">Tap "Add Money" to get started</p>
+            </div>`;
+        return;
+    }
+
+    listEl.innerHTML = [...transactions].reverse().map((tx, i) => `
+        <div class="tx-item">
+            <div class="tx-icon">${TX_ICONS[i % TX_ICONS.length]}</div>
+            <div class="tx-details">
+                <div class="tx-note">${esc(tx.note)}</div>
+                <div class="tx-date">${fmtDate(tx.date)}</div>
+            </div>
+            <div class="tx-amount">+${fmt(tx.amount)}</div>
+        </div>
+    `).join('');
+}
+
+/* ═══════════════════════════════════════════════
+   Add deposit
+═══════════════════════════════════════════════ */
+function openAddModal() {
+    const amtEl = document.getElementById('deposit-amount');
+    const noteEl = document.getElementById('deposit-note');
+    amtEl.value  = '';
+    noteEl.value = '';
+    amtEl.classList.remove('error');
+    openModal('add-modal');
+    setTimeout(() => amtEl.focus(), 300);
+}
+
+function saveDeposit() {
+    const amtEl  = document.getElementById('deposit-amount');
+    const noteEl = document.getElementById('deposit-note');
+    const amount = parseFloat(amtEl.value);
+
+    if (!amount || amount <= 0) {
+        amtEl.classList.add('error');
+        amtEl.focus();
+        setTimeout(() => amtEl.classList.remove('error'), 1600);
+        return;
+    }
+
+    const prevTotal = total();
+
+    transactions.push({
+        id:     Date.now(),
+        amount: Math.round(amount * 100) / 100,
+        note:   noteEl.value.trim() || 'Deposit',
+        date:   new Date().toISOString(),
+    });
+    localStorage.setItem('iphone-tx', JSON.stringify(transactions));
+
+    closeModal('add-modal');
+    updateUI();
+
+    const newTotal = total();
+    setTimeout(() => checkMilestones(prevTotal, newTotal), 500);
+}
+
+/* ═══════════════════════════════════════════════
+   Milestones
+═══════════════════════════════════════════════ */
+function checkMilestones(prev, next) {
+    for (const m of MILESTONES) {
+        if (!hitMilestones.includes(m.amount) && next >= m.amount) {
+            hitMilestones.push(m.amount);
+            localStorage.setItem('iphone-ms', JSON.stringify(hitMilestones));
+            showCelebration(m);
+            return; // one at a time
+        }
+    }
+}
+
+function showCelebration(m) {
+    document.getElementById('cel-emoji').textContent  = m.emoji;
+    document.getElementById('cel-title').textContent  = m.title;
+    document.getElementById('cel-amount').textContent = fmt(m.amount);
+    document.getElementById('cel-msg').textContent    = m.msg;
+    openModal('cel-modal');
+
+    if (m.pct === 100) launchMegaConfetti();
+    else               launchConfetti();
+}
+
+/* ═══════════════════════════════════════════════
+   Confetti
+═══════════════════════════════════════════════ */
+function launchConfetti() {
+    const burst = (ratio, opts) =>
+        confetti({ origin:{ y:0.65 }, particleCount: Math.floor(220 * ratio), ...opts });
+
+    burst(0.25, { spread: 26, startVelocity: 55 });
+    burst(0.20, { spread: 60 });
+    burst(0.35, { spread: 100, decay: 0.91, scalar: 0.8 });
+    burst(0.10, { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 });
+    burst(0.10, { spread: 120, startVelocity: 45 });
+}
+
+function launchMegaConfetti() {
+    const end  = Date.now() + 6000;
+    const rand = (lo, hi) => Math.random() * (hi - lo) + lo;
+
+    // Streaming cannons
+    const interval = setInterval(() => {
+        if (Date.now() > end) { clearInterval(interval); return; }
+        const n = 90 * ((end - Date.now()) / 6000);
+        confetti({ particleCount: n, startVelocity: 30, spread: 360, ticks: 70,
+                   origin:{ x: rand(0.1, 0.3), y: rand(-0.1, 0.2) }, zIndex: 1001 });
+        confetti({ particleCount: n, startVelocity: 30, spread: 360, ticks: 70,
+                   origin:{ x: rand(0.7, 0.9), y: rand(-0.1, 0.2) }, zIndex: 1001 });
+    }, 220);
+
+    // Big initial burst
+    confetti({ particleCount: 180, spread: 180, origin:{ y: 0.55 }, ticks: 220,
+               colors:['#7c3aed','#a855f7','#e879f9','#fbbf24','#34d399','#60a5fa'], zIndex: 1001 });
+    setTimeout(() =>
+        confetti({ particleCount: 160, spread: 160, origin:{ y: 0.55 }, ticks: 200,
+                   colors:['#f472b6','#fb923c','#a3e635','#38bdf8','#c084fc'], zIndex: 1001 })
+    , 600);
+}
+
+/* ═══════════════════════════════════════════════
+   Modal helpers
+═══════════════════════════════════════════════ */
+function openModal(id)  { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function overlayClick(e, id) {
+    if (e.target === document.getElementById(id)) closeModal(id);
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Enter'  && document.getElementById('add-modal').classList.contains('active')) saveDeposit();
+    if (e.key === 'Escape') { closeModal('add-modal'); closeModal('cel-modal'); }
+});
+
+/* ═══════════════════════════════════════════════
+   Boot
+═══════════════════════════════════════════════ */
+updateUI();
+</script>
+</body>
+</html>
