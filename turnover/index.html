@@ -36,6 +36,7 @@ button:disabled{cursor:not-allowed}
 #svg.drag{cursor:grabbing}
 .hex{fill:var(--tile);stroke:var(--tile-edge);stroke-width:2.5;stroke-linejoin:round}
 .hex.owned{fill:color-mix(in srgb,var(--own) 20%,var(--tile));stroke:var(--own);stroke-width:6}
+.hex.owned.turn{stroke-width:9}
 .tile{cursor:pointer}
 .tile:focus{outline:none}
 .tile:focus-visible .hex{stroke:var(--ink);stroke-width:5}
@@ -123,6 +124,21 @@ button:disabled{cursor:not-allowed}
 .hand svg{width:74px;height:74px;flex:none}
 .hand b{display:block;font:15px var(--font-display)}
 .hand span{font:13px/1.3 var(--font-body);color:var(--ink-soft)}
+.sect{display:grid;gap:5px;font-family:var(--font-body)}
+.sect-h{display:flex;justify-content:space-between;font:700 12.5px var(--font-check);letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid var(--ink);padding-bottom:2px}
+.trow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center;background:rgba(255,255,255,.8);border:2px solid var(--pc);border-radius:8px;padding:4px 5px 4px 8px}
+.trow.on{box-shadow:0 0 0 2px var(--ink)}
+.tname{display:grid;grid-template-columns:auto 1fr;gap:1px 8px;align-items:center;text-align:left;background:none;border:0;padding:0;min-width:0}
+.tname b{font:14px var(--font-display)}
+.tname small{grid-column:1/3;font-size:12px;color:var(--ink-soft)}
+.dots{display:flex;gap:3px}
+.dots i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--ink)}
+.dots i.on{background:var(--pc)}
+.mini{border:2px solid var(--ink);border-radius:7px;background:var(--stamp);color:#fff;font:700 13px var(--font-body);padding:7px 9px;box-shadow:0 2px 0 var(--ink);white-space:nowrap}
+.mini.cash{background:var(--good)}
+.mini:disabled{background:#cfc4b0;border-color:#b7a78f;box-shadow:none}
+.mini:active{transform:translateY(2px);box-shadow:none}
+.sect-empty{margin:0;font-size:12.5px;color:var(--ink-soft)}
 .end{border:2.5px solid var(--ink);border-radius:9px;background:var(--ink);color:var(--paper);font:15px var(--font-display);padding:9px;box-shadow:0 3px 0 rgba(0,0,0,.35)}
 .end:disabled{background:#cfc4b0;border-color:#b7a78f;color:#fff;box-shadow:none}
 .end.nudge{background:var(--stamp);animation:nudge .8s ease-in-out infinite}
@@ -268,7 +284,7 @@ button:disabled{cursor:not-allowed}
 <div class="modal" id="dlg-rules" hidden>
   <div class="sheet" role="dialog" aria-label="Rules">
     <h2>How to play</h2>
-    <p>You are rival servers on the same floor. Whoever pockets the most tips by close wins.</p>
+    <p>You are rival servers on the same floor. Whoever pockets the most tips by close wins. A table pays nothing until you walk it all the way to Check and turn it over, so keep your tables moving every turn.</p>
     <h3>Your turn</h3>
     <ul>
       <li><b>Place the tile</b> you drew on any glowing spot. It must touch the floor already built.</li>
@@ -426,7 +442,7 @@ function place(k){
   if(!nbrs(q,r).length)return;
   const t={q,r,...S.hand};
   if(t.type==='table')Object.assign(t,{owner:null,step:-1,mods:[],frozen:0,request:null});
-  S.tiles[k]=t;S.hand=null;S.phase='act';S.selected=k;
+  S.tiles[k]=t;S.hand=null;S.phase='act';S.selected=t.type==='table'&&owned(S.cur).length<S.players[S.cur].slots?k:null;
   log(`${S.players[S.cur].name} placed a ${tileName(t)}.`);
   render();fitIfNeeded();
 }
@@ -550,7 +566,7 @@ function tileInner(t){
     return `<polygon class="hex sp-${t.type}" points="${HEX}"/><g class="ico spico" transform="translate(-19.5 -34) scale(1.62)">${ICON[d.icon]}</g><text class="lbl" y="28">${d.label}</text>`;
   }
   const o=t.owner!=null?S.players[t.owner]:null, col=o?COLORS[o.ci]:null, placed=t.q!=null;
-  let s=`<polygon class="hex${o?' owned':''}" points="${HEX}"${o?` style="--own:${col.c}"`:''}/>`+tableArt(t.seats,col)+
+  let s=`<polygon class="hex${o?' owned':''}${o&&t.owner===S.cur&&S.phase!=='over'?' turn':''}" points="${HEX}"${o?` style="--own:${col.c}"`:''}/>`+tableArt(t.seats,col)+
     `<text class="num" style="fill:${col?col.ink:'var(--ink)'}">${t.seats}</text>`;
   if(placed&&boostedAt(t.q,t.r))s+=`<g class="bdg boost" transform="translate(29 -23)"><title>Touches a Window or Bar: tip +50%</title><rect x="-14" y="-7.5" width="28" height="15" rx="7.5"/><text>+50%</text></g>`;
   if(placed&&farAt(t.q,t.r))s+=`<g class="bdg far" transform="translate(-29 23)"><title>Far from the Kitchen: Main Course costs 1 extra action</title><rect x="-13" y="-7.5" width="26" height="15" rx="7.5"/><text>FAR</text></g>`;
@@ -660,7 +676,7 @@ function renderStrip(){
   const el=$('#strip'),p=S.players[S.cur],t=S.selected&&S.tiles[S.selected];
   if(!t){
     el.innerHTML=S.phase==='place'?`<div class="strip-main"><div class="strip-title">Place the ${esc(tileName(S.hand))}</div><p>Pick any glowing spot. Drag to pan, scroll or pinch to zoom.</p></div>`
-      :S.phase==='act'?`<div class="strip-main"><div class="strip-title">${plural(S.actionsLeft,'action')} left</div><p>Tap a table to claim it, serve its next step, or turn it over. Tap any tile to see what it does.</p></div>`
+      :S.phase==='act'?`<div class="strip-main"><div class="strip-title">${plural(S.actionsLeft,'action')} left</div><p>You only get paid when a table reaches Check and you turn it over. Use the buttons in your section, or tap a table on the floor.</p></div>`
       :`<div class="strip-main"><div class="strip-title">Service is over</div><p>Have a look around the floor, then check the final tips.</p></div>`;
     return;
   }
@@ -693,15 +709,24 @@ function renderPanel(){
   const total=Math.max(1,p.maxActions+(S.fx.actions||0));
   let pips='';for(let i=0;i<Math.max(total,S.actionsLeft);i++)pips+=`<i class="${i<S.actionsLeft?'':'used'}"></i>`;
   const hand=S.hand?`<div class="hand"><svg viewBox="-60 -60 120 120" aria-hidden="true"><g class="t-${S.hand.type}">${tileInner(S.hand)}</g></svg><div><b>${esc(tileName(S.hand))}</b><span>${tileText(S.hand)}</span></div></div>`:'';
+  const mine=owned(S.cur);
+  const sect=`<div class="sect"><div class="sect-h"><span>${esc(p.name)}’s section</span><span>${mine.length}/${p.slots} tables</span></div>`+mine.map(t=>{
+    const k=key(t.q,t.r),a=tableAction(t),cash=a.kind==='turnover';
+    const label=cash?`Turn over · $${tally(t).total}`:`${STEPS[t.step+1].name} · ${a.cost}`;
+    return `<div class="trow${k===S.selected?' on':''}"><button class="tname" data-sel="${k}" aria-label="Show this ${t.seats}-top on the floor"><b>${t.seats}-top</b><span class="dots">${STEPS.map((x,i)=>`<i class="${i<=t.step?'on':''}"></i>`).join('')}</span><small>${t.frozen?'Card declined':'At '+STEPS[t.step].name}</small></button>
+      <button class="mini${cash?' cash':''}" data-go="${k}"${a.ok?'':' disabled'} title="${esc(a.ok?(cash?'Collect the tip and reopen the table':a.label+', '+plural(a.cost,'action')):a.why)}">${label}</button></div>`;}).join('')
+    +(mine.length<p.slots?`<p class="sect-empty">${mine.length?plural(p.slots-mine.length,'open slot')+'. Tap an open table on the floor to claim it.':'No tables yet. Tap an open table on the floor to claim it.'}</p>`:'')
+    +(mine.length?'<p class="sect-empty">Tips are paid only when you turn a table over.</p>':'')+'</div>';
   pad.innerHTML=over
     ?`<div class="pad-head"><span class="serial">Closed</span><span>${S.rounds} rounds</span></div><div class="who">Last call<small>The stack ran out and the round is done.</small></div><button class="end" data-act="final">See final tips</button>`
     :`<div class="pad-head"><span class="serial">№ ${String(S.turn).padStart(4,'0')}</span><span>Round ${S.round} of ${S.rounds}</span></div>
-      <div class="who">${esc(p.name)}<small>${S.phase==='place'?'Step 1: place your tile':'Step 2: take your actions'}</small></div>
+      <div class="who">${esc(p.name)}<small>${S.phase==='place'?'Step 1: place your tile':'Step 2: move your tables toward Check'}</small></div>
       <div class="pips" aria-label="${plural(S.actionsLeft,'action')} left">${pips}<span>${plural(S.actionsLeft,'action')} left</span></div>
       ${hand}
+      ${sect}
       <button class="end${S.phase==='act'&&S.actionsLeft===0?' nudge':''}" data-act="end"${S.phase!=='act'?' disabled':''}>End turn</button>`;
   $('#tips').innerHTML=`<h2>Tips tonight</h2>`+S.players.map((q,i)=>`<div class="row${i===S.cur&&!over?' cur':''}"><i class="dot" style="background:${COLORS[q.ci].c}"></i>
-      <div class="nm">${esc(q.name)}<small>${owned(i).length}/${q.slots} tables · ${q.turned} turned${q.maxActions>3?' · 4 actions':''}${q.shield?' · Favour':''}</small></div><div class="amt">$${q.tips}</div></div>`).join('')
+      <div class="nm">${esc(q.name)}<small>${owned(i).length}/${q.slots} tables · $${owned(i).reduce((n,t)=>n+tally(t).total,0)} unpaid on the floor · ${q.turned} turned${q.maxActions>3?' · 4 actions':''}${q.shield?' · Favour':''}</small></div><div class="amt">$${q.tips}</div></div>`).join('')
     +(S.fx.title&&!over?`<p class="tonight">This round: ${S.fx.title}. <span>${S.fx.short}.</span></p>`:'');
   $('#upg').innerHTML=over?'':`<h2>Spend ${esc(p.name)}’s tips</h2>`+UPGRADES.map(u=>{
     const has=u.id==='slot'?p.slots>3:u.id==='action'?p.maxActions>3:p.shield;
@@ -738,7 +763,7 @@ function renderModal(){
   const b=m.querySelector('button:last-of-type');if(b)b.focus();
 }
 function render(){
-  const f=document.activeElement,sel=f&&f.dataset?(f.dataset.go?'[data-go]':f.dataset.act?`[data-act="${f.dataset.act}"]`:f.dataset.key?`[data-key="${f.dataset.key}"]`:null):null;
+  const f=document.activeElement,sel=f&&f.dataset?(f.dataset.go?`#${f.closest('#pad')?'pad':'strip'} [data-go="${f.dataset.go}"]`:f.dataset.sel?`[data-sel="${f.dataset.sel}"]`:f.dataset.act?`[data-act="${f.dataset.act}"]`:f.dataset.key?`[data-key="${f.dataset.key}"]`:null):null;
   renderBoard();renderStrip();renderPanel();renderModal();
   if(sel&&$('#modal').hidden){const n=document.querySelector(sel);if(n&&!n.disabled)n.focus({preventScroll:true});}
   try{localStorage.setItem('turnover-v1',JSON.stringify(S));}catch(e){}
@@ -751,7 +776,8 @@ function renderNames(){
   $('#names').innerHTML=Array.from({length:n},(_,i)=>`<label><i style="background:${COLORS[i].c}"></i><input id="pn${i}" maxlength="12" value="${esc(keep[i])}" aria-label="Server ${i+1} name" autocomplete="off"></label>`).join('');
 }
 document.addEventListener('click',e=>{
-  const go=e.target.closest('[data-go]');if(go){doAction(go.dataset.go);return;}
+  const go=e.target.closest('[data-go]');if(go){if(S.tiles[go.dataset.go])S.selected=go.dataset.go;doAction(go.dataset.go);return;}
+  const sl=e.target.closest('[data-sel]');if(sl){S.selected=sl.dataset.sel;render();return;}
   const b=e.target.closest('[data-buy]');if(b){buy(b.dataset.buy);return;}
   const a=e.target.closest('[data-act]');if(!a)return;
   switch(a.dataset.act){
