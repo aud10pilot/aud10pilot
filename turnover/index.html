@@ -87,6 +87,7 @@ button:disabled{cursor:not-allowed}
 .track{list-style:none;margin:0;padding:0;display:flex;gap:4px;flex-wrap:wrap}
 .track li{display:flex;align-items:center;gap:4px;padding:3px 7px 3px 4px;border-radius:99px;border:2px solid #cdbfa8;color:#a8977e;font:600 11.5px var(--font-body)}
 .track svg{width:18px;height:18px}
+.track em{font:700 11px var(--font-body);font-style:normal}
 .track li.done{border-color:var(--ink);background:var(--ink);color:var(--paper)}
 .track li.now{border-color:var(--ink);background:var(--mustard);color:var(--ink)}
 .notes{display:flex;gap:5px;flex-wrap:wrap}
@@ -272,6 +273,7 @@ button:disabled{cursor:not-allowed}
     <ul>
       <li><b>Place the tile</b> you drew on any glowing spot. It must touch the floor already built.</li>
       <li><b>Take 3 actions.</b> Tap a table, then use the button: claim an open table, serve its next step, or turn it over once it reaches Check.</li>
+      <li><b>Big tables are slow.</b> One trip feeds four guests. At a 6-top, Appetizers and Main Course cost 2 actions. At an 8-top, Drinks, Appetizers, Main Course and Dessert cost 2 actions each. No single step ever costs more than 3.</li>
       <li>You can hold 3 tables at once. Service always runs Menu, Drinks, Appetizers, Main Course, Dessert, Check.</li>
       <li>After everyone has gone, one Event card sets a rule for the whole next round.</li>
     </ul>
@@ -279,12 +281,12 @@ button:disabled{cursor:not-allowed}
     <ul>
       <li>$2 per seat, paid when you turn the table over. Totals round up to the dollar.</li>
       <li>+50% if the table touches a Window or a Bar when it pays out (it does not stack).</li>
-      <li>Tables more than 2 hexes from the Kitchen are <b>far</b>: Main Course costs 2 actions. A table touching a Server Station is never far.</li>
+      <li>Tables more than 2 hexes from the Kitchen are <b>far</b>: Main Course costs 1 extra action. A table touching a Server Station is never far.</li>
     </ul>
     <h3>Cards</h3>
     <ul>
       <li><b>Challenge:</b> drawn every time you serve Main Course. Some hurt, some help.</li>
-      <li><b>Special Request:</b> sometimes attached when you claim. Hit the step in time for a bonus; ignore it for no penalty.</li>
+      <li><b>Special Request:</b> sometimes attached when you claim. Hit the step in time for a bonus; ignore it for no penalty. Bigger tables get longer deadlines.</li>
       <li><b>Upgrades:</b> spend tips during your turn. Tips spent are gone from your score.</li>
     </ul>
     <h3>Closing time</h3>
@@ -309,7 +311,11 @@ const STEPS=[
   {id:'main',name:'Main Course',verb:'Serve Main Course'},
   {id:'dessert',name:'Dessert',verb:'Serve Dessert'},
   {id:'check',name:'Check',verb:'Drop the Check'}];
-const MAIN=3, CHECK=5, FAR=2, REQUEST_CHANCE=0.4;
+const MAIN=3, CHECK=5, FAR=2, REQUEST_CHANCE=0.4, MAX_STEP_COST=3;
+const HEAVY={6:[2,3],8:[1,2,3,4]};          // steps that take a second trip at big tables
+const EXTRA_TURNS={6:1,8:2};                // big tables get longer Special Request deadlines
+const heavy=(seats,step)=>(HEAVY[seats]||[]).includes(step);
+const heavyText=seats=>seats===6?'Appetizers and Main Course cost 2 actions':seats===8?'Drinks, Appetizers, Main Course and Dessert cost 2 actions each':'';
 const ICON={
   menu:'<path d="M6 3h12v18H6z"/><path d="M9.5 8h5M9.5 12h5M9.5 16h3"/>',
   drinks:'<path d="M5 4h14l-7 8z"/><path d="M12 12v8M8 20h8"/>',
@@ -325,7 +331,7 @@ const ICON={
   bolt:'<path d="M13 2.5L5 13.5h6l-1 8 8-11h-6z"/>'
 };
 const SPECIAL={
-  kitchen:{name:'Kitchen',label:'KITCHEN',icon:'flame',text:'Every Main Course starts here. Tables more than 2 hexes away are far: Main Course costs them 2 actions.'},
+  kitchen:{name:'Kitchen',label:'KITCHEN',icon:'flame',text:'Every Main Course starts here. Tables more than 2 hexes away are far: Main Course costs them 1 extra action.'},
   entrance:{name:'Entrance',label:'ENTRANCE',icon:'door',text:'Where the guests walk in. No effect on play.'},
   station:{name:'Server Station',label:'STATION',icon:'pot',text:'Tables touching a Station are never far from the Kitchen.'},
   bar:{name:'Bar',label:'BAR',icon:'drinks',text:'Tables touching the Bar tip +50%.'},
@@ -352,9 +358,9 @@ const EVENTS={
   party:{n:2,icon:'door',title:'Large Party Walk-In',text:'Fourteen people, no reservation. Each server’s first claim next round costs no action.',short:'First claim costs no action',fx:{freeClaim:true}}
 };
 const REQUESTS={
-  birthday:{n:2,icon:'dessert',title:'Birthday Party',target:4,turns:2,bonus:6,text:'Candles are in someone’s purse. Reach Dessert by the end of your next turn for +$6.'},
-  allergy:{n:2,icon:'apps',title:'Allergy',target:3,turns:2,bonus:4,text:'No nuts, and they mean it. Reach Main Course by the end of your next turn for +$4.'},
-  vip:{n:2,icon:'star',title:'VIP',target:5,turns:3,bonus:8,text:'The owner’s cousin. Reach Check within 3 of your turns, this one included, for +$8.'}
+  birthday:{n:2,icon:'dessert',title:'Birthday Party',target:4,turns:2,bonus:6,text:'The candles are in someone’s purse.'},
+  allergy:{n:2,icon:'apps',title:'Allergy',target:3,turns:2,bonus:4,text:'No nuts, and they mean it.'},
+  vip:{n:2,icon:'star',title:'VIP',target:5,turns:3,bonus:8,text:'The owner’s cousin.'}
 };
 const DECKS={challenge:CHALLENGES,event:EVENTS,request:REQUESTS};
 const UPGRADES=[
@@ -381,7 +387,7 @@ const farAt=(q,r)=>hexDist(q,r)>FAR&&!nbrs(q,r).some(n=>n.type==='station');
 const boostedAt=(q,r)=>nbrs(q,r).some(n=>n.type==='bar'||n.type==='window');
 const owned=i=>Object.values(S.tiles).filter(t=>t.type==='table'&&t.owner===i);
 const tileName=t=>t.type==='table'?t.seats+'-top':SPECIAL[t.type].name;
-const tileText=t=>t.type==='table'?`Seats ${t.seats}. Pays $${t.seats*2} when turned over.`:SPECIAL[t.type].text;
+const tileText=t=>t.type==='table'?`Seats ${t.seats}. Pays $${t.seats*2} when turned over.${heavyText(t.seats)?' Slow to serve: '+heavyText(t.seats)+'.':''}`:SPECIAL[t.type].text;
 function spots(){const out=new Set();for(const k in S.tiles){const t=S.tiles[k];for(const [dq,dr] of DIRS){const n=key(t.q+dq,t.r+dr);if(!S.tiles[n])out.add(n);}}return [...out];}
 function log(m){S.log.unshift(m);if(S.log.length>40)S.log.length=40;}
 function draw(deck){
@@ -436,8 +442,9 @@ function tableAction(t){
     return {ok:false,why:`This is ${S.players[t.owner].name}’s table.`};
   }else{
     if(t.step===CHECK)a={kind:'turnover',label:'Turn over table',cost:1};
-    else{const next=t.step+1;a={kind:'advance',label:STEPS[next].verb,cost:1,challenge:next===MAIN};
-      if(next===MAIN)a.cost+=(farAt(t.q,t.r)?1:0)+(S.fx.mainExtra||0);}
+    else{const next=t.step+1;a={kind:'advance',label:STEPS[next].verb,cost:1+(heavy(t.seats,next)?1:0),challenge:next===MAIN};
+      if(next===MAIN)a.cost+=(farAt(t.q,t.r)?1:0)+(S.fx.mainExtra||0);
+      a.cost=Math.min(MAX_STEP_COST,a.cost);}
     if(S.phase==='place')a.why='Place your tile first.';
     else if(t.frozen)a.why='Card declined. This table is stuck until your next turn is over.';
   }
@@ -463,8 +470,9 @@ function doAction(k){
     log(`${p.name} claimed a ${t.seats}-top.`);
     if(Math.random()<REQUEST_CHANCE){
       const r=draw('request');
-      t.request={id:r.id,title:r.title,target:r.target,turnsLeft:r.turns,bonus:r.bonus,status:'active'};
-      card({deck:'request',kicker:'Special request',icon:r.icon,title:r.title,text:r.text,btn:'Got it'});
+      const turns=r.turns+(EXTRA_TURNS[t.seats]||0);
+      t.request={id:r.id,title:r.title,target:r.target,turnsLeft:turns,bonus:r.bonus,status:'active'};
+      card({deck:'request',kicker:'Special request',icon:r.icon,title:r.title,text:`${r.text} Reach ${STEPS[r.target].name} within ${turns} of your turns, this one included, for +$${r.bonus}.`,btn:'Got it'});
     }
   }else if(a.kind==='advance'){
     t.step++;
@@ -545,7 +553,7 @@ function tileInner(t){
   let s=`<polygon class="hex${o?' owned':''}" points="${HEX}"${o?` style="--own:${col.c}"`:''}/>`+tableArt(t.seats,col)+
     `<text class="num" style="fill:${col?col.ink:'var(--ink)'}">${t.seats}</text>`;
   if(placed&&boostedAt(t.q,t.r))s+=`<g class="bdg boost" transform="translate(29 -23)"><title>Touches a Window or Bar: tip +50%</title><rect x="-14" y="-7.5" width="28" height="15" rx="7.5"/><text>+50%</text></g>`;
-  if(placed&&farAt(t.q,t.r))s+=`<g class="bdg far" transform="translate(-29 23)"><title>Far from the Kitchen: Main Course costs 2 actions</title><rect x="-13" y="-7.5" width="26" height="15" rx="7.5"/><text>FAR</text></g>`;
+  if(placed&&farAt(t.q,t.r))s+=`<g class="bdg far" transform="translate(-29 23)"><title>Far from the Kitchen: Main Course costs 1 extra action</title><rect x="-13" y="-7.5" width="26" height="15" rx="7.5"/><text>FAR</text></g>`;
   if(t.request){const q=t.request;s+=`<g class="bdg req ${q.status}" transform="translate(-30 -23)"><title>${q.title} request</title><circle r="10"/><text>${q.status==='done'?'✓':q.status==='missed'?'✕':'★'}</text></g>`;}
   if(o){const st=STEPS[t.step];s+=`<g class="chip${t.step===CHECK?' ready':''}" transform="translate(0 38)"><title>${st.name}</title><circle r="13"/><g class="ico" transform="translate(-9 -9) scale(.75)">${ICON[st.id]}</g></g>`;}
   if(t.frozen)s+=`<g transform="rotate(-16)"><rect class="stampbox" x="-36" y="-9" width="72" height="18" rx="3"/><text class="stamptxt">DECLINED</text></g>`;
@@ -660,14 +668,15 @@ function renderStrip(){
     el.innerHTML=`<div class="strip-main"><div class="strip-title">${SPECIAL[t.type].name}</div><p>${SPECIAL[t.type].text}</p></div>`;return;
   }
   const o=t.owner!=null?S.players[t.owner]:null,a=tableAction(t),tl=tally(t);
-  const track=STEPS.map((s,i)=>`<li class="${o&&i<t.step?'done':o&&i===t.step?'now':''}" title="${s.name}">${ico(s.id)}<span>${s.name}</span></li>`).join('');
+  const track=STEPS.map((s,i)=>`<li class="${o&&i<t.step?'done':o&&i===t.step?'now':''}" title="${s.name}${heavy(t.seats,i)?', 2 actions':''}">${ico(s.id)}<span>${s.name}</span>${heavy(t.seats,i)?'<em>×2</em>':''}</li>`).join('');
   let notes=`<span class="tip">Tip ${o?'so far':'if served'}: $${tl.total}</span>`;
   if(boostedAt(t.q,t.r))notes+='<span>Window / Bar +50%</span>';
-  if(farAt(t.q,t.r))notes+='<span class="warn">Far: Main Course costs 2 actions</span>';
+  if(heavyText(t.seats))notes+=`<span class="warn">Big table: ${heavyText(t.seats)}</span>`;
+  if(farAt(t.q,t.r))notes+='<span class="warn">Far: Main Course +1 action</span>';
   if(o&&t.step<MAIN&&S.fx.mainExtra)notes+='<span class="warn">Kitchen backed up: Main +1 action</span>';
   for(const m of t.mods)notes+=`<span>${esc(m.label)}</span>`;
   if(t.request){const q=t.request;
-    notes+=q.status==='active'?`<span class="reqn">★ ${q.title}: reach ${STEPS[q.target].name} ${q.turnsLeft>1?'by the end of '+(q.turnsLeft===2?'your next turn':'your turn after next'):'this turn'} for +$${q.bonus}</span>`
+    notes+=q.status==='active'?`<span class="reqn">★ ${q.title}: reach ${STEPS[q.target].name} for +$${q.bonus} (${q.turnsLeft>1?q.turnsLeft+' of '+esc(o.name)+'’s turns left':'last turn'})</span>`
       :q.status==='missed'?`<span>${q.title} request missed</span>`:'';}
   let act='';
   if(a.kind){
